@@ -1,0 +1,206 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Restrict all access by default)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity validations
+    function isValidUser(data) {
+      return data.id == request.auth.uid
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.email is string && data.email.size() <= 128
+        && data.phone is string && data.phone.size() <= 30
+        && data.address is string && data.address.size() <= 300
+        && data.role in ['user', 'owner', 'admin']
+        && data.createdAt is string;
+    }
+
+    function isValidMachine(data) {
+      return data.id is string
+        && data.ownerId == request.auth.uid
+        && data.ownerName is string && data.ownerName.size() <= 100
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.category is string && data.category.size() <= 100
+        && data.manufacturer is string && data.manufacturer.size() <= 100
+        && data.model is string && data.model.size() <= 100
+        && data.year is int && data.year >= 1900 && data.year <= 2040
+        && data.dailyPrice is int && data.dailyPrice >= 0
+        && data.deposit is int && data.deposit >= 0
+        && data.location is string && data.location.size() <= 300
+        && data.status in ['available', 'maintenance', 'rented']
+        && (data.imageUrls is list || !('imageUrls' in data))
+        && data.createdAt is string;
+    }
+
+    function isValidBooking(data) {
+      return data.id is string
+        && data.machineId is string
+        && data.machineTitle is string
+        && data.ownerId is string
+        && data.renterId == request.auth.uid
+        && data.renterName is string && data.renterName.size() <= 100
+        && data.startDate is string
+        && data.endDate is string
+        && data.totalPrice is int && data.totalPrice >= 0
+        && data.status in ['pending', 'approved', 'rejected', 'paid', 'active', 'completed', 'cancelled']
+        && data.createdAt is string;
+    }
+
+    function isValidPayment(data) {
+      return data.id is string
+        && data.bookingId is string
+        && data.amount is int && data.amount >= 0
+        && data.paymentMethod is string && data.paymentMethod.size() <= 100
+        && data.status in ['pending', 'completed', 'refunded']
+        && data.createdAt is string;
+    }
+
+    function isValidReview(data) {
+      return data.id is string
+        && data.bookingId is string
+        && data.machineId is string
+        && data.userId == request.auth.uid
+        && data.userName is string && data.userName.size() <= 100
+        && data.rating is int && data.rating >= 1 && data.rating <= 5
+        && data.content is string && data.content.size() <= 1000
+        && data.createdAt is string;
+    }
+
+    function isValidChatRoom(data) {
+      return data.id is string
+        && (data.renterId == request.auth.uid || data.ownerId == request.auth.uid)
+        && data.machineId is string
+        && data.machineTitle is string
+        && data.lastMessage is string
+        && data.updatedAt is string;
+    }
+
+    function isValidChatMessage(data) {
+      return data.id is string
+        && data.senderId == request.auth.uid
+        && data.senderName is string && data.senderName.size() <= 100
+        && data.message is string && data.message.size() <= 1000
+        && data.createdAt is string;
+    }
+
+    // Rules for User profiles (PII security)
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (resource.data.id == request.auth.uid || request.auth.uid != null);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if (isOwner(userId) && isValidUser(incoming())
+        && (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
+        && (!('email' in existing()) || incoming().email == existing().email))
+        || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Rules for Machines (Equipments)
+    match /machines/{machineId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidMachine(incoming()) && isValidId(machineId);
+      allow update: if isSignedIn() && (isOwner(existing().ownerId) || isAdmin()) && isValidMachine(incoming())
+        && incoming().ownerId == existing().ownerId
+        && (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt);
+      allow delete: if isSignedIn() && (isOwner(existing().ownerId) || isAdmin());
+    }
+
+    // Rules for Bookings
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && (resource.data.renterId == request.auth.uid || resource.data.ownerId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.renterId == request.auth.uid || resource.data.ownerId == request.auth.uid);
+      allow create: if isSignedIn() && isValidBooking(incoming()) && isValidId(bookingId)
+        && incoming().renterId == request.auth.uid;
+      allow update: if isSignedIn()
+        && (request.auth.uid == existing().renterId || request.auth.uid == existing().ownerId)
+        && (
+             // Owner approves/rejects
+             (request.auth.uid == existing().ownerId && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+             ||
+             // Renter pays or cancels
+             (request.auth.uid == existing().renterId && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+           )
+        && incoming().renterId == existing().renterId
+        && incoming().ownerId == existing().ownerId
+        && incoming().machineId == existing().machineId
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && request.auth.uid == existing().renterId && existing().status == 'pending';
+    }
+
+    // Rules for Payments
+    match /bookings/{bookingId}/payments/{paymentId} {
+      allow get, list: if isSignedIn() && (
+        get(/databases/$(database)/documents/bookings/$(bookingId)).data.renterId == request.auth.uid
+        || get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId == request.auth.uid
+      );
+      allow create: if isSignedIn()
+        && get(/databases/$(database)/documents/bookings/$(bookingId)).data.renterId == request.auth.uid
+        && isValidPayment(incoming()) && isValidId(paymentId);
+      allow update, delete: if false;
+    }
+
+    // Rules for Reviews
+    match /reviews/{reviewId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidReview(incoming()) && isValidId(reviewId)
+        && incoming().userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    // Rules for ChatRooms
+    match /chats/{chatId} {
+      allow get: if isSignedIn() && (resource.data.renterId == request.auth.uid || resource.data.ownerId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.renterId == request.auth.uid || resource.data.ownerId == request.auth.uid);
+      allow create: if isSignedIn() && isValidChatRoom(incoming()) && isValidId(chatId)
+        && (incoming().renterId == request.auth.uid || incoming().ownerId == request.auth.uid);
+      allow update: if isSignedIn() && (existing().renterId == request.auth.uid || existing().ownerId == request.auth.uid)
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt'])
+        );
+      allow delete: if false;
+    }
+
+    // Rules for ChatMessages (nested structure)
+    match /chats/{chatId}/messages/{messageId} {
+      allow get, list: if isSignedIn() && (
+        get(/databases/$(database)/documents/chats/$(chatId)).data.renterId == request.auth.uid
+        || get(/databases/$(database)/documents/chats/$(chatId)).data.ownerId == request.auth.uid
+      );
+      allow create: if isSignedIn()
+        && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.renterId == request.auth.uid
+          || get(/databases/$(database)/documents/chats/$(chatId)).data.ownerId == request.auth.uid
+        )
+        && isValidChatMessage(incoming()) && isValidId(messageId);
+      allow update, delete: if false;
+    }
+  }
+}

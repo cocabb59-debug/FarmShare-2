@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information containing contact details and roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique user ID matching their Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email", "description": "Google raw email address" },
+        "phone": { "type": "string", "description": "Korean phone number provided during signup" },
+        "address": { "type": "string", "description": "Physical address of the user" },
+        "role": { "type": "string", "enum": ["user", "owner", "admin"], "description": "Platform subscription/usage role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when user was registered" }
+      },
+      "required": ["id", "name", "email", "phone", "address", "role", "createdAt"]
+    },
+    "Machine": {
+      "title": "Farm Machinery",
+      "description": "Registered agricultural equipment details and statuses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID of the machine" },
+        "ownerId": { "type": "string", "description": "UID of the owner" },
+        "ownerName": { "type": "string", "description": "Cached name of the owner" },
+        "title": { "type": "string", "description": "Listing title of the farm machine" },
+        "category": { "type": "string", "description": "Category of the machine" },
+        "manufacturer": { "type": "string", "description": "Manufacturer name" },
+        "model": { "type": "string", "description": "Model code/name" },
+        "year": { "type": "integer", "description": "Manufacturing year" },
+        "hourlyPrice": { "type": "integer", "description": "Rental price per hour in KRW" },
+        "dailyPrice": { "type": "integer", "description": "Rental price per day in KRW" },
+        "weeklyPrice": { "type": "integer", "description": "Rental price per week in KRW" },
+        "deposit": { "type": "integer", "description": "Required platform deposit in KRW" },
+        "description": { "type": "string", "description": "Detailed description of the machine" },
+        "location": { "type": "string", "description": "Geographical location" },
+        "status": { "type": "string", "enum": ["available", "maintenance", "rented"], "description": "Availability status" },
+        "imageUrls": {
+          "type": "array",
+          "description": "List of base64 or URL strings for equipment visual representation"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of machine creation" }
+      },
+      "required": ["id", "ownerId", "ownerName", "title", "category", "manufacturer", "model", "year", "dailyPrice", "deposit", "location", "status", "createdAt"]
+    },
+    "Booking": {
+      "title": "Machine Rental Booking",
+      "description": "Rental lease reservation and operational scheduling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique booking identifier" },
+        "machineId": { "type": "string", "description": "ID of the rented machine" },
+        "machineTitle": { "type": "string", "description": "Title of the rented machine" },
+        "machineImageUrl": { "type": "string", "description": "Primary display image of the machine" },
+        "ownerId": { "type": "string", "description": "UID of the machine owner" },
+        "renterId": { "type": "string", "description": "UID of the leasing user" },
+        "renterName": { "type": "string", "description": "Cached name of the leasing user" },
+        "renterPhone": { "type": "string", "description": "Cached renter contact phone" },
+        "renterAddress": { "type": "string", "description": "Cached renter delivery address" },
+        "startDate": { "type": "string", "format": "date-time", "description": "Lease start timestamp (ISO)" },
+        "endDate": { "type": "string", "format": "date-time", "description": "Lease end timestamp (ISO)" },
+        "totalPrice": { "type": "integer", "description": "Calculated total rental price in KRW" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected", "paid", "active", "completed", "cancelled"],
+          "description": "Current workflow state of booking"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Booking creation timestamp" }
+      },
+      "required": ["id", "machineId", "machineTitle", "ownerId", "renterId", "renterName", "startDate", "endDate", "totalPrice", "status", "createdAt"]
+    },
+    "Payment": {
+      "title": "Booking Transaction Payment",
+      "description": "E-commerce transaction details associated with completed booking actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique payment reference ID" },
+        "bookingId": { "type": "string", "description": "Associated booking identifier" },
+        "amount": { "type": "integer", "description": "Paid amount in KRW" },
+        "paymentMethod": { "type": "string", "description": "Selected method: Toss, KakaoPay, Card, Transfer" },
+        "status": { "type": "string", "enum": ["pending", "completed", "refunded"], "description": "Payment process status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Payment checkout completion timestamp" }
+      },
+      "required": ["id", "bookingId", "amount", "paymentMethod", "status", "createdAt"]
+    },
+    "Review": {
+      "title": "Machine Rental Feedback Review",
+      "description": "End-user ratings and feedback remarks on machinery and owners",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique review index" },
+        "bookingId": { "type": "string", "description": "Lease booking context ID" },
+        "machineId": { "type": "string", "description": "Target equipment ID" },
+        "userId": { "type": "string", "description": "UID of reviewer" },
+        "userName": { "type": "string", "description": "Username of reviewer" },
+        "rating": { "type": "integer", "description": "Visual feedback scale from 1 to 5 stars" },
+        "content": { "type": "string", "description": "Written commentary review text" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Review submission timestamp" }
+      },
+      "required": ["id", "bookingId", "machineId", "userId", "userName", "rating", "content", "createdAt"]
+    },
+    "ChatRoom": {
+      "title": "Active Private Chat Thread Room",
+      "description": "Metadata descriptor for dual-party chat channels",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique chat thread ID" },
+        "renterId": { "type": "string", "description": "UID of leasing user" },
+        "ownerId": { "type": "string", "description": "UID of equipment owner" },
+        "machineId": { "type": "string", "description": "Equipment context identifier" },
+        "machineTitle": { "type": "string", "description": "Title of equipment context" },
+        "lastMessage": { "type": "string", "description": "Last sent conversation text block" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last message timestamp" }
+      },
+      "required": ["id", "renterId", "ownerId", "machineId", "machineTitle", "lastMessage", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "Private Chat Channel Text Message",
+      "description": "Single text message packet inside atomic chat room threads",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique index of message" },
+        "senderId": { "type": "string", "description": "Sender UID" },
+        "senderName": { "type": "string", "description": "Display name of sender" },
+        "message": { "type": "string", "description": "Actual texted conversation string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when messaged" }
+      },
+      "required": ["id", "senderId", "senderName", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Subscribed user master profiles"
+    },
+    "/machines/{machineId}": {
+      "schema": "Machine",
+      "description": "Registered agricultural units catalog"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Scheduling reservations and agreement details"
+    },
+    "/bookings/{bookingId}/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Underlying transactions for authorized booking"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Ratings and textual feedback on agricultural listings"
+    },
+    "/chats/{chatId}": {
+      "schema": "ChatRoom",
+      "description": "Channels metadata for direct communication threads"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Conversation message sequences"
+    }
+  }
+}
