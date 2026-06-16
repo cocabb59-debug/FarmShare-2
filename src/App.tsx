@@ -11,12 +11,13 @@ import { FAQBot } from "./components/FAQBot";
 import { AdminView } from "./components/AdminView";
 import { MachineDetailModal } from "./components/MachineDetailModal";
 import { MachineFormModal } from "./components/MachineFormModal";
+import { AuthErrorModal } from "./components/AuthErrorModal";
 import { Machine, Role } from "./types";
 import { motion, AnimatePresence } from "motion/react";
 import { Tractor, PlusCircle, HelpCircle } from "lucide-react";
 
 export default function App() {
-  const { isProfileRequired, userProfile, authLoading } = useApp();
+  const { isProfileRequired, userProfile, authLoading, authError } = useApp();
 
   // Navigation states
   const [activeTab, setActiveTab] = useState<string>("home");
@@ -133,6 +134,9 @@ export default function App() {
         {isRegisteringMachine && (
           <MachineFormModal onClose={() => setIsRegisteringMachine(false)} />
         )}
+
+        {/* Auth Whitelist Security Domain guide helper popup */}
+        {authError && <AuthErrorModal />}
       </AnimatePresence>
 
       {/* 5. Floating action utility buttons */}

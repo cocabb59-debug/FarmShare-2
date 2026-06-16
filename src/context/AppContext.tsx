@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  User as FirebaseUser,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile
+} from "firebase/auth";
 import {
   collection,
   doc,
@@ -33,9 +39,16 @@ interface AppContextType {
 
   // Actions
   login: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<void>;
+  registerWithEmail: (email: string, password: string, name: string, phone: string, address: string, role: Role) => Promise<void>;
   logout: () => Promise<void>;
   completeRegistration: (phone: string, address: string, role: Role) => Promise<void>;
   changeRole: (newRole: Role) => Promise<void>;
+
+  // Custom OAuth / Domain error handling state
+  authError: string | null;
+  authErrorDetails: { code?: string; domain?: string } | null;
+  clearAuthError: () => void;
 
   // Machine Actions
   registerMachine: (machineData: Omit<Machine, "id" | "ownerId" | "ownerName" | "createdAt">) => Promise<void>;
@@ -78,6 +91,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeChatMessages, setActiveChatMessages] = useState<ChatMessage[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Custom Auth domain whitelist/OAuth error helpers
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authErrorDetails, setAuthErrorDetails] = useState<{ code?: string; domain?: string } | null>(null);
+
+  const clearAuthError = () => {
+    setAuthError(null);
+    setAuthErrorDetails(null);
+  };
 
   // 1. Monitor Authentication State Change
   useEffect(() => {
@@ -254,7 +276,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Actions
   const login = async () => {
-    await signInWithGoogle();
+    try {
+      setAuthError(null);
+      setAuthErrorDetails(null);
+      await signInWithGoogle();
+    } catch (err: any) {
+      console.error("Login trigger error:", err);
+      // Analyze firebase auth errors (e.g. auth/unauthorized-domain)
+      const errorCode = err.code || err.message || "";
+      const currentHost = window.location.hostname;
+      
+      setAuthError(err.message || String(err));
+      setAuthErrorDetails({
+        code: errorCode,
+        domain: currentHost
+      });
+    }
+  };
+
+  const loginWithEmail = async (email: string, password: string) => {
+    try {
+      setAuthError(null);
+      setAuthErrorDetails(null);
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      console.error("Email Login Error:", err);
+      throw err;
+    }
+  };
+
+  const registerWithEmail = async (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    address: string,
+    role: Role
+  ) => {
+    try {
+      setAuthError(null);
+      setAuthErrorDetails(null);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Update display name
+      await updateProfile(user, { displayName: name });
+      
+      // Save profile immediately
+      const profile: UserProfile = {
+        id: user.uid,
+        name,
+        email,
+        phone,
+        address,
+        role,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, "users", user.uid), profile);
+      setUserProfile(profile);
+      setIsProfileRequired(false);
+    } catch (err: any) {
+      console.error("Email Registration Error:", err);
+      throw err;
+    }
   };
 
   const logout = async () => {
@@ -605,9 +689,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadingRooms,
         loadingMessages,
         login,
+        loginWithEmail,
+        registerWithEmail,
         logout,
         completeRegistration,
         changeRole,
+        authError,
+        authErrorDetails,
+        clearAuthError,
         registerMachine,
         updateMachine,
         deleteMachine,
